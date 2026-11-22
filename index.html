@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Thermal Lab</title>
+<style>
+:root{color-scheme:dark;--bg:#0b0b0e;--pn:#131318;--ln:#26262e;--tx:#e8e8ee;--mu:#8b8b99;--ac:#c6ff3d;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--tx);font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+#app{display:grid;grid-template-columns:340px 1fr;height:100%}
+#panel{background:var(--pn);border-right:1px solid var(--ln);overflow-y:auto;padding:14px}
+main{display:flex;align-items:center;justify-content:center;padding:18px;min-height:0;min-width:0;position:relative}
+canvas{max-width:100%;max-height:100%;width:auto;height:auto;box-shadow:0 10px 60px #000a;background:#000}
+h1{font-size:15px;margin:0 0 10px;letter-spacing:.08em;text-transform:uppercase}
+h4{margin:16px 0 6px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ac);border-top:1px solid var(--ln);padding-top:12px}
+.row{display:grid;grid-template-columns:1fr auto;gap:0 8px;margin:5px 0}
+.row span:last-child{color:var(--mu);font-variant-numeric:tabular-nums}
+.row input{grid-column:1/3;width:100%;accent-color:var(--ac)}
+.btns{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+button,select,textarea,input[type=text]{font:inherit;color:var(--tx);background:#1c1c24;border:1px solid var(--ln);border-radius:6px;padding:7px 10px}
+button{cursor:pointer;flex:1}button:hover{border-color:var(--ac)}
+button.pri{background:var(--ac);color:#0b0b0e;font-weight:700;border-color:var(--ac)}
+button.hot{background:#ff4a1c;border-color:#ff4a1c;color:#fff;font-weight:700}
+select,textarea{width:100%;margin:4px 0}
+textarea{resize:vertical;min-height:54px}
+label.ck{display:flex;gap:8px;align-items:center;margin:6px 0}
+input[type=file]{width:100%;color:var(--mu);margin:4px 0}
+#pal{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin:6px 0}
+#pal input{width:100%;height:30px;padding:0;border:1px solid var(--ln);background:none}
+#st{color:var(--mu);min-height:18px;margin-top:6px}
+@media(max-width:760px){#app{grid-template-columns:1fr;grid-template-rows:55% 45%}main{order:-1;padding:8px}#panel{border-right:0;border-top:1px solid var(--ln)}}
+</style>
+</head>
+<body>
+<div id="app">
+<aside id="panel">
+<h1>Thermal Lab</h1>
+<div class="btns"><button class="hot" id="rA">🔥 Agressivo</button><button class="pri" id="rL">🎲 Leve</button><button id="rR">Reset</button></div>
+<div id="ctl"></div>
+</aside>
+<main><canvas id="c" width="1080" height="1350"></canvas></main>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const FONTS={"Arial Black":'900 {s}px "Arial Black",Arial,sans-serif',"Impact":'400 {s}px Impact,sans-serif',"Helvetica bold":'700 {s}px "Helvetica Neue",Arial,sans-serif',"Mono":'700 {s}px "Courier New",monospace',"Serif":'900 {s}px Georgia,serif'};
+const ASPECT={"4:5":[1080,1350],"1:1":[1080,1080],"9:16":[1080,1920],"16:9":[1920,1080],"2:3":[1080,1620]};
+const PRESETS={
+"Thermal":["#000000","#3b1fb8","#22a6ff","#ff4d2e","#ffb070","#ffffff"],
+"Lilás ácido":["#0a0a0a","#555555","#b45cf0","#d8ff1f","#ff3a1a","#ffffff"],
+"Tóxico":["#000000","#0a2a0a","#1f3fb0","#39ff14","#a8ff60","#ffffff"],
+"Menta azul":["#1c2a8a","#3a4fb0","#9aa0b8","#39ff14","#7be02a","#eaffdf"],
+"Infra":["#000000","#3a0066","#ff0066","#ffaa00","#ffff66","#ffffff"]};
+const G=[
+["Motion blur",[["len","Comprimento",0,.8,.28,.005],["angle","Ângulo",0,360,90,1],["trail","Rastro unilateral",0,1,.85,.01],["breathe","Pulsação",0,1,.25,.01]]],
+["Térmico",[["gain","Ganho de calor",.3,6,2.2,.01],["gamma","Curva",.3,3,1,.01],["sharp","Nitidez da fonte",0,1.5,.9,.01],["glow","Glow",0,.15,.03,.001],["bands","Faixas de contorno",0,24,0,1],["hard","Dureza das faixas",0,1,.6,.01],["hi","Recuperar luzes",0,1,.5,.01],["detail","Realce de detalhes",0,3,.6,.01]]],
+["Distorção fluida",[["warp","Quantidade",0,1.5,.3,.01],["wscale","Escala",.5,8,2.5,.01]]],
+["Grain",[["grain","Intensidade",0,1,.35,.01],["gsize","Tamanho",1,6,2,.1]]],
+["Fonte de calor",[["contrast","Contraste",.3,4,1.4,.01],["invert","Inverter (0/1)",0,1,0,1]]],
+["Texto",[["size","Tamanho",.04,.7,.26,.005],["spacing","Espaçamento",-.1,.4,-.02,.005],["lineh","Entrelinha",.5,1.6,.85,.01],["px","Posição X",0,1,.5,.01],["py","Posição Y",0,1,.5,.01],["rot","Rotação",-90,90,0,1]],1],
+["Imagem",[["imgScale","Escala",.3,3,1,.01],["imgX","Posição X",0,1,.5,.01],["imgY","Posição Y",0,1,.5,.01]],1],
+["Animação",[["loop","Duração do loop (s)",2,12,6,1]]]];
+const R={len:[.05,.7],gain:[1,4.5],sharp:[0,1.2],glow:[0,.1],bands:[0,14],warp:[0,1.2],grain:[.1,.8],contrast:[.8,3],gamma:[.6,1.6],wscale:[1,6],gsize:[1,4]};
+const RID=["len","angle","trail","breathe","gain","gamma","sharp","glow","bands","hard","warp","wscale","grain","gsize","contrast","hi","detail"];
+const v={},D={},ui={};let pal=PRESETS.Thermal.slice(),dirty=1,srcDirty=1,anim=true,rec=null,phase=0,frame=0,img=null,text="come\nback",fontKey="Arial Black",textOn=true,imgOn=true,aspect="4:5",scale=2,busy=false;
+
+/* ---------- UI ---------- */
+const ctl=$("ctl");
+function sec(t){const h=document.createElement("h4");h.textContent=t;ctl.append(h)}
+function slider(id,lab,min,max,val,step,src){
+  v[id]=D[id]=val;const r=document.createElement("div");r.className="row";
+  r.innerHTML=`<span>${lab}</span><span></span><input type="range" min="${min}" max="${max}" step="${step}" value="${val}">`;
+  const inp=r.querySelector("input"),out=r.children[1];ui[id]={inp,out};out.textContent=val;
+  inp.oninput=()=>{v[id]=+inp.value;out.textContent=v[id];dirty=1;if(src)srcDirty=1};ctl.append(r)}
+function setv(id,x){const u=ui[id],s=+u.inp.step;x=Math.min(+u.inp.max,Math.max(+u.inp.min,Math.round(x/s)*s));v[id]=x;u.inp.value=x;u.out.textContent=+x.toFixed(3)}
+function el(h){const d=document.createElement("div");d.innerHTML=h;return d.firstElementChild}
+sec("Composição");
+ctl.append(el(`<div><select id="asp">${Object.keys(ASPECT).map(k=>`<option>${k}</option>`).join("")}</select></div>`));
+ctl.append(el(`<label class="ck"><input type="checkbox" id="anim" checked> Animar (loop contínuo)</label>`));
+G.forEach(([t,items,src],i)=>{
+  if(t==="Texto"){sec("Texto");ctl.append(el(`<label class="ck"><input type="checkbox" id="tOn" checked> Ativar texto</label>`),el(`<textarea id="txt">come
+back</textarea>`),el(`<select id="fnt">${Object.keys(FONTS).map(k=>`<option>${k}</option>`).join("")}</select>`),el(`<input type="file" id="fontFile" accept=".ttf,.otf,.woff,.woff2">`));}
+  else if(t==="Imagem"){sec("Imagem");ctl.append(el(`<label class="ck"><input type="checkbox" id="iOn" checked> Usar imagem</label>`),el(`<input type="file" id="imgFile" accept="image/*">`));}
+  else sec(t);
+  items.forEach(a=>slider(...a,src));
+  if(t==="Térmico"){sec("Paleta térmica");ctl.append(el(`<select id="pre">${Object.keys(PRESETS).map(k=>`<option>${k}</option>`).join("")}<option>Personalizada</option></select>`),el(`<div id="pal"></div>`));}
+});
+sec("Exportar");
+ctl.append(el(`<select id="scl"><option value="1">Resolução 1× (base)</option><option value="2" selected>Resolução 2×</option><option value="3">Resolução 3×</option><option value="4">Resolução 4× (máx. do dispositivo)</option></select>`),
+el(`<div class="btns"><button class="pri" id="bPng">Exportar PNG</button><button id="bVid">Gravar vídeo (1 loop)</button></div>`),el(`<div id="st"></div>`));
+function drawPal(){const p=$("pal");p.innerHTML="";pal.forEach((c,i)=>{const e=document.createElement("input");e.type="color";e.value=c;e.oninput=()=>{pal[i]=e.value;$("pre").value="Personalizada";dirty=1};p.append(e)})}
+function setPal(a){pal=a.slice();drawPal();dirty=1}
+drawPal();
+$("pre").onchange=e=>{if(PRESETS[e.target.value])setPal(PRESETS[e.target.value])};
+$("asp").value=aspect;$("asp").onchange=e=>{aspect=e.target.value;srcDirty=dirty=1};
+$("anim").onchange=e=>{anim=e.target.checked;dirty=1};
+$("tOn").onchange=e=>{textOn=e.target.checked;srcDirty=dirty=1};
+$("iOn").onchange=e=>{imgOn=e.target.checked;srcDirty=dirty=1};
+$("txt").oninput=e=>{text=e.target.value;srcDirty=dirty=1};
+$("fnt").onchange=e=>{fontKey=e.target.value;srcDirty=dirty=1};
+$("scl").onchange=e=>scale=+e.target.value;
+$("imgFile").onchange=e=>{const f=e.target.files[0];if(!f)return;const i=new Image();i.onload=()=>{img=i;srcDirty=dirty=1};i.src=URL.createObjectURL(f)};
+$("fontFile").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const ff=new FontFace("CustomF",await f.arrayBuffer());await ff.load();document.fonts.add(ff);FONTS["Personalizada"]='400 {s}px CustomF,sans-serif';const o=document.createElement("option");o.textContent="Personalizada";$("fnt").append(o);$("fnt").value=fontKey="Personalizada";srcDirty=dirty=1}catch(x){$("st").textContent="Fonte inválida."}};
+
+/* ---------- Randomize ---------- */
+const rr=(a,b)=>a+Math.random()*(b-a);
+function hsl(h,s,l){s/=100;l/=100;const k=n=>(n+h/30)%12,a=s*Math.min(l,1-l),f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));return"#"+[f(0),f(8),f(4)].map(x=>Math.round(x*255).toString(16).padStart(2,"0")).join("")}
+function randomize(hard){
+  RID.forEach(id=>{const u=ui[id],mn=+u.inp.min,mx=+u.inp.max;
+    if(hard){let [a,b]=R[id]||[mn,mx];let x=rr(a,b);if(id==="angle"&&Math.random()<.7)x=Math.floor(Math.random()*8)*45;if(id==="bands"&&Math.random()<.6)x=0;if(id==="trail")x=Math.random()<.5?rr(.6,1):rr(0,.4);setv(id,x)}
+    else{const [a,b]=R[id]||[mn,mx];setv(id,Math.min(b,Math.max(a,v[id]+(Math.random()-.5)*(b-a)*.22)))}});
+  if(hard||Math.random()<.12){const h=rr(0,360),o=[60,120,180,240,300][Math.floor(Math.random()*5)];
+    setPal([hsl(h,60,4),hsl(h+rr(-20,20),85,22),hsl(h+o,95,50),hsl(h+o*2,100,55),hsl(h+o*2+rr(-30,30),100,68),hsl(h,30,96)]);$("pre").value="Personalizada"}
+  dirty=1}
+$("rA").onclick=()=>randomize(1);$("rL").onclick=()=>randomize(0);
+$("rR").onclick=()=>{Object.keys(D).forEach(k=>setv(k,D[k]));setPal(PRESETS.Thermal);$("pre").value="Thermal"};
+
+/* ---------- WebGL ---------- */
+const cv=$("c"),gl=cv.getContext("webgl",{preserveDrawingBuffer:true,antialias:false});
+const FS=`precision highp float;uniform sampler2D u_src;uniform vec2 u_res;uniform float u_phase,u_seed,u_hi,u_detail,u_len,u_angle,u_trail,u_breathe,u_gain,u_gamma,u_sharp,u_glow,u_bands,u_hard,u_warp,u_wscale,u_grain,u_gsize,u_contrast,u_invert;uniform vec3 u_p0,u_p1,u_p2,u_p3,u_p4,u_p5;
+float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
+float L(vec2 p){vec3 c=texture2D(u_src,p).rgb;float l=dot(c,vec3(.299,.587,.114));l=clamp((l-.5)*u_contrast+.5,0.,1.);return mix(l,1.-l,u_invert);}
+void main(){
+vec2 uv=gl_FragCoord.xy/u_res;float asp=u_res.x/u_res.y;vec2 q=uv*vec2(asp,1.)*u_wscale;vec2 cp=vec2(cos(u_phase),sin(u_phase))*.8;
+vec2 w=vec2(vn(q+cp)+.5*vn(q*2.1+cp*1.7+5.),vn(q+cp+17.3)+.5*vn(q*2.1-cp+9.))-.75;
+uv+=w*u_warp*.12;
+float a=radians(u_angle);vec2 d=vec2(cos(a),sin(a));
+float len=u_len*(1.+u_breathe*.6*sin(u_phase));vec2 stp=d*len*vec2(1./asp,1.);
+float acc=0.,ws=0.;
+for(int i=0;i<40;i++){float t=float(i)/39.;float pos=mix(t*2.-1.,t,u_trail);float wt=1.-abs(pos)*.9;acc+=wt*L(uv-stp*pos);ws+=wt;}
+float l0=L(uv);float m=0.;for(int i=0;i<8;i++){float th=float(i)*.785398;m+=L(uv+vec2(cos(th)/asp,sin(th))*.006);}m/=8.;float heat=acc/ws*u_gain;heat=max(heat,l0*u_sharp);heat+=(l0-m)*u_detail*1.5;
+if(u_glow>0.){float g=0.;for(int i=0;i<12;i++){float fi=float(i);float r=sqrt((fi+.5)/12.)*u_glow;float th=fi*2.39996;g+=L(uv+vec2(cos(th)/asp,sin(th))*r);}heat+=g/12.*.9;}
+heat=max(heat,0.);heat=mix(clamp(heat,0.,1.),heat*(1.+heat/9.)/(1.+heat),u_hi);heat=pow(clamp(heat,0.,1.),u_gamma);
+float gn=h(floor(gl_FragCoord.xy/(u_gsize*u_res.y/1350.))+u_seed)-.5;
+heat=clamp(heat+gn*u_grain*.3,0.,1.);
+if(u_bands>.5){heat=mix(heat,floor(heat*u_bands+.5)/u_bands,u_hard);}
+float x=heat*5.;vec3 c=u_p0;c=mix(c,u_p1,clamp(x,0.,1.));c=mix(c,u_p2,clamp(x-1.,0.,1.));c=mix(c,u_p3,clamp(x-2.,0.,1.));c=mix(c,u_p4,clamp(x-3.,0.,1.));c=mix(c,u_p5,clamp(x-4.,0.,1.));
+gl_FragColor=vec4(c,1.);}`;
+function sh(t,s){const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))console.error(gl.getShaderInfoLog(o));return o}
+const pg=gl.createProgram();gl.attachShader(pg,sh(gl.VERTEX_SHADER,"attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}"));gl.attachShader(pg,sh(gl.FRAGMENT_SHADER,FS));gl.linkProgram(pg);gl.useProgram(pg);
+const vb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+const al=gl.getAttribLocation(pg,"p");gl.enableVertexAttribArray(al);gl.vertexAttribPointer(al,2,gl.FLOAT,false,0,0);
+const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);
+[[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE],[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR]].forEach(([a,b])=>gl.texParameteri(gl.TEXTURE_2D,a,b));
+gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+const U=n=>gl.getUniformLocation(pg,"u_"+n),sc=document.createElement("canvas"),sx=sc.getContext("2d");
+const FU=["len","angle","trail","breathe","gain","gamma","sharp","glow","bands","hard","warp","wscale","grain","gsize","contrast","invert","hi","detail"];
+const rgb=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)/255);
+
+function drawSource(w,h){
+  sc.width=w;sc.height=h;sx.fillStyle="#000";sx.fillRect(0,0,w,h);
+  if(img&&imgOn){const s=Math.max(w/img.width,h/img.height)*v.imgScale;sx.drawImage(img,(w-img.width*s)*v.imgX,(h-img.height*s)*v.imgY,img.width*s,img.height*s)}
+  if(textOn&&text.trim()){const fs=v.size*h,ls=text.split("\n");sx.save();sx.translate(v.px*w,v.py*h);sx.rotate(v.rot*Math.PI/180);
+    sx.font=FONTS[fontKey].replace("{s}",fs);sx.fillStyle="#fff";sx.textAlign="center";sx.textBaseline="middle";
+    if("letterSpacing"in sx)sx.letterSpacing=(v.spacing*fs)+"px";
+    const lh=v.lineh*fs;ls.forEach((t,i)=>sx.fillText(t,0,(i-(ls.length-1)/2)*lh));sx.restore()}
+}
+function dims(mul){const[bw,bh]=ASPECT[aspect];const mx=Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE),gl.getParameter(gl.MAX_RENDERBUFFER_SIZE),8192);
+  const m=Math.min(mul,mx/Math.max(bw,bh));return[Math.round(bw*m/2)*2,Math.round(bh*m/2)*2]}
+let cur="";
+function render(w,h,ph,seed){
+  const k=w+"x"+h;if(cur!==k){cv.width=w;cv.height=h;cur=k;srcDirty=1}
+  if(srcDirty){drawSource(w,h);gl.bindTexture(gl.TEXTURE_2D,tex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,sc);srcDirty=0}
+  gl.viewport(0,0,w,h);gl.uniform2f(U("res"),w,h);gl.uniform1f(U("phase"),ph);gl.uniform1f(U("seed"),seed);
+  FU.forEach(n=>gl.uniform1f(U(n),n==="angle"?v.angle:v[n]));
+  pal.forEach((c,i)=>gl.uniform3fv(U("p"+i),rgb(c)));
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4)}
+
+/* ---------- Loop ---------- */
+let t0=performance.now();
+function tick(now){
+  if(!busy&&(anim||dirty)){
+    if(anim){phase=((now-t0)/1000/v.loop)*Math.PI*2;frame++}
+    const[w,h]=dims(1);render(w,h,phase,anim?Math.floor(frame/2)%997:1);dirty=0}
+  requestAnimationFrame(tick)}
+requestAnimationFrame(tick);
+
+/* ---------- Export ---------- */
+async function save(blob,name){
+  try{const d=window.claude&&claude.use?await claude.use("downloads"):null;
+    if(d){await d.save({filename:name,data:blob});return}}catch(e){if(e&&e.code==="declined")return}
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
+$("bPng").onclick=()=>{
+  busy=true;const[w,h]=dims(scale);render(w,h,phase,Math.floor(frame/2)%997);
+  cv.toBlob(async b=>{await save(b,`thermal-${w}x${h}.png`);$("st").textContent=`PNG ${w}×${h} pronto.`;busy=false;dirty=1},"image/png")};
+$("bVid").onclick=()=>{
+  if(!window.MediaRecorder){$("st").textContent="Gravação de vídeo não suportada neste navegador.";return}
+  const mt=["video/mp4;codecs=avc1","video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm"].find(t=>MediaRecorder.isTypeSupported(t));
+  busy=true;const[w,h]=dims(Math.min(scale,2));const dur=v.loop*1000,chunks=[];render(w,h,0,0);
+  const mr=new MediaRecorder(cv.captureStream(30),{mimeType:mt,videoBitsPerSecond:24e6});
+  mr.ondataavailable=e=>e.data.size&&chunks.push(e.data);
+  mr.onstop=async()=>{const ext=mt.includes("mp4")?"mp4":"webm";await save(new Blob(chunks,{type:mt}),`thermal-${w}x${h}.${ext}`);$("st").textContent=`Vídeo ${w}×${h} (${ext}) pronto.`;busy=false;dirty=1};
+  const s=performance.now();mr.start();let f=0;
+  (function step(now){const e=now-s;if(e>=dur){mr.stop();return}
+    render(w,h,e/dur*Math.PI*2,Math.floor(f++/2)%997);$("st").textContent=`Gravando… ${Math.round(e/dur*100)}%`;requestAnimationFrame(step)})(s)};
+</script>
+</body>
+</html>
